@@ -74,4 +74,4 @@ with gr.Blocks(title="Mission Engineering Chatbot") as demo:
     upload_btn.click(upload_and_prepare, inputs=pdf_file, outputs=status)
     ask_btn.click(ask_question, inputs=question, outputs=answer)
 
-demo.launch(share=True)
+demo.launch()
