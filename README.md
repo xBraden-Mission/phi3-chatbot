@@ -1,16 +1,17 @@
+---
+title: phi3-chatbot
+emoji: 🤖
+colorFrom: indigo
+colorTo: pink
+sdk: gradio
+sdk_version: "4.44.1"
+app_file: app.py
+python_version: "3.10"
+pinned: false
+---
+
 # phi3-chatbot
 
-A Gradio-based PDF Q&A chatbot using LangChain + FAISS + Hugging Face Hub.
+Upload a PDF, ask questions, get answers — powered by FAISS, LangChain, and a lightweight LLM.
 
-## Features
-- Upload a PDF
-- Ask questions
-- Uses Mistral 7B via Hugging Face
-
-## Setup
-Make sure `HUGGINGFACE_TOKEN` is set as a secret in Hugging Face Space.
-
-## Dev
-```bash
-pip install -r requirements.txt
-python app.py
+This chatbot uses runtime document upload, LangChain for orchestration, and FAISS for fast vector search.
