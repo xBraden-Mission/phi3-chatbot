@@ -11,47 +11,67 @@ from langchain_community.llms import HuggingFaceHub
 
 # Config
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-LLM_REPO_ID = "mistralai/Mistral-7B-Instruct-v0.2"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+LLM_REPO_ID = "google/flan-t5-base"
 
-# Auth
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 if HF_TOKEN is None:
-    raise RuntimeError("HUGGINGFACE_TOKEN not set in environment")
+    raise RuntimeError("❌ HUGGINGFACE_TOKEN not set in environment.")
 
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = HF_TOKEN
 
-def process_pdf(file, question):
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(file.read())
-            loader = PyPDFLoader(tmp_file.name)
-            docs = loader.load()
+def process_pdf(file):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pdf_path = os.path.join(tmpdir, file.name)
+        with open(pdf_path, "wb") as f:
+            f.write(file.read())
 
-        splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
-        chunks = splitter.split_documents(docs)
+        loader = PyPDFLoader(pdf_path)
+        docs = loader.load()
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        splits = splitter.split_documents(docs)
 
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        db = FAISS.from_documents(chunks, embeddings)
+        vectordb = FAISS.from_documents(splits, embeddings)
 
         llm = HuggingFaceHub(
             repo_id=LLM_REPO_ID,
-            model_kwargs={"temperature": 0.1, "max_new_tokens": 512}
+            model_kwargs={"temperature": 0.1, "max_new_tokens": 256},
         )
-        qa = RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever())
-        return qa.run(question)
 
+        qa = RetrievalQA.from_chain_type(llm=llm, retriever=vectordb.as_retriever())
+
+        return qa
+
+state = gr.State()
+
+def upload_and_prepare(pdf):
+    try:
+        qa_chain = process_pdf(pdf)
+        state.value = qa_chain
+        return "✅ PDF processed. Ask your question!"
     except Exception as e:
-        return f"❌ Error: {str(e)}"
+        return f"❌ Error: {e}"
 
-gr.Interface(
-    fn=process_pdf,
-    inputs=[
-        gr.File(label="Upload a PDF"),
-        gr.Textbox(label="Ask a question")
-    ],
-    outputs=gr.Textbox(label="Answer"),
-    title="Phi-3 Chatbot",
-    allow_flagging="never"
-).launch()
+def ask_question(question):
+    if state.value is None:
+        return "❌ Please upload a PDF first."
+    try:
+        return state.value.run(question)
+    except Exception as e:
+        return f"❌ Failed to answer: {e}"
+
+with gr.Blocks(title="Mission Engineering Chatbot") as demo:
+    gr.Markdown("# 📘 Mission Engineering Chatbot")
+    with gr.Row():
+        pdf_file = gr.File(file_types=[".pdf"], label="Upload PDF")
+        upload_btn = gr.Button("Process PDF")
+    status = gr.Textbox(label="Status")
+
+    question = gr.Textbox(label="Ask a question")
+    answer = gr.Textbox(label="Answer")
+    ask_btn = gr.Button("Submit")
+
+    upload_btn.click(upload_and_prepare, inputs=pdf_file, outputs=status)
+    ask_btn.click(ask_question, inputs=question, outputs=answer)
+
+demo.launch(share=True)
